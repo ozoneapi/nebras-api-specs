@@ -21,10 +21,12 @@ paths:
         and receives the `UaeKycId` and an ICP token for the identification. The instrument is designated by the
         User directly with the LFI, through a user experience of the LFI's own design.
 
-        The TPP must send the request as a signed message with the content type `application/jwt`, either as a
-        JWS or as a JWE that encapsulates the JWS. The request carries the `UaeKycId` and ICP token, the amount,
-        and the merchant, terminal and acquirer the payment is made at. The LFI must validate the ICP token with
-        ICP before answering.
+        The TPP must send the request as a signed message, encrypted as a JWE to the LFI's public encryption key with
+        the content type `application/jwt`, where the entire request body is encrypted. Sending the signed message
+        without encryption is prohibited. The signed message is described in the request schema for guidance only. The
+        request carries the `UaeKycId` and ICP token, the amount, and the merchant, terminal and acquirer the payment
+        is made at. The LFI must decrypt the request, verify the signature and validate the ICP token with ICP before
+        answering.
 
         The LFI must return the response as a signed message, encrypted as a JWE with the content type
         `application/jwt`, where the entire response body is encrypted. Returning the signed message without
@@ -32,7 +34,10 @@ paths:
 
         The response carries a single payment token, which the TPP passes back to the LFI at the point of payment,
         with the values from the request it was issued for, and in `Data.Instruments` the instruments the LFI holds
-        for the User: each an `IBAN` or a `PrimaryAccountNumber`.
+        for the User: each an `IBAN` or a `PAN`.
+
+        If the LFI cannot match an instrument based on the values in the request, the LFI must return a `400` response
+        with the error code `Query.UnmatchedInstrument`.
 
         This operation is not carried out under a consent. The TPP must obtain an access token using the
         Client Credentials grant type with the `biometric-payments` scope.
@@ -199,24 +204,18 @@ components:
         - nbf
     AEInstrumentQueryRequest:
       description: >-
-        The request, represented in both decoded and encoded form using an `anyOf`, to help implementers readily
-        understand both the structure and serialized form of the request. **The decoded form
-        `AEInstrumentQueryRequestSigned` is for guidance on content only.** The request body must be the encoded form,
-        `AEInstrumentQueryRequestSerialized`.
+        Instrument Query request. The TPP must send the request as a JWE, described by
+        `AEInstrumentQueryRequestEncrypted`. The signed message, described by `AEInstrumentQueryRequestSigned`, is the
+        payload that is encrypted and is provided for guidance only. Sending the signed message without encryption is
+        prohibited.
       anyOf:
         - $ref: '#/components/schemas/AEInstrumentQueryRequestSigned'
-        - $ref: '#/components/schemas/AEInstrumentQueryRequestSerialized'
-    AEInstrumentQueryRequestSerialized:
-      title: Serialized Request
-      description: >-
-        The request as a compact serialization. Either a JWS signed by the TPP whose claims are described by
-        `AEInstrumentQueryRequestSigned`, or a JWE encrypted to the LFI's public encryption key that encapsulates that
-        JWS. Please refer to the business rules for a description of the approach to signing and encrypting this data.
-      type: string
-      example: eyJhbGciOiJQUzI1NiIsImtpZCI6InRwcC1zaWctMSIsInR5cCI6IkpXVCJ9....
+        - $ref: '#/components/schemas/AEInstrumentQueryRequestEncrypted'
     AEInstrumentQueryRequestSigned:
-      description: |
-        Instrument Query Request Signed Schema
+      title: Signed Request Data
+      description: >-
+        Instrument Query Request Signed Schema. This is the signed message that the TPP encrypts as a JWE before it is
+        sent. **This is provided for guidance only. Sending the signed message without encryption is prohibited.**
       allOf:
         - $ref: '#/components/schemas/AEJwt'
         - type: object
@@ -225,6 +224,15 @@ components:
               $ref: '#/components/schemas/AEInstrumentQueryRequestMessage'
           required:
             - message
+    AEInstrumentQueryRequestEncrypted:
+      title: Encrypted Request Data
+      description: >-
+        Instrument Query request, provided as a JWE by the TPP and encrypted to the LFI's public encryption key. The
+        entire request body is encrypted, and the decrypted payload is the signed message described by
+        `AEInstrumentQueryRequestSigned`. Please refer to the business rules for a description of the approach to
+        signing and encrypting this data.
+      type: string
+      example: eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ....
     AEInstrumentQueryRequestMessage:
       description: >-
         The payload of the signed request message. Carries the identifier and the ICP token ICP returned on
@@ -332,7 +340,7 @@ components:
         - $ref: '#/components/schemas/AEInstrumentQueryResponseSigned'
         - $ref: '#/components/schemas/AEInstrumentQueryResponseEncrypted'
     AEInstrumentQueryResponseSigned:
-      title: Signed Instrument Data
+      title: Signed Response Data
       description: >-
         Instrument Query Response Signed Schema. This is the signed message that is encrypted as a JWE before it is
         returned. **This is provided for guidance only. Returning the signed message without encryption is
@@ -353,7 +361,7 @@ components:
             - azp
             - message
     AEInstrumentQueryResponseEncrypted:
-      title: Encrypted Instrument Data
+      title: Encrypted Response Data
       description: >-
         Instrument Query response, provided as a JWE by the LFI. The entire response body is encrypted, and the
         decrypted payload is the signed message described by `AEInstrumentQueryResponseSigned`. Please refer to the
@@ -389,28 +397,19 @@ components:
               allOf:
                 - $ref: '#/components/schemas/AEIcpToken'
             InstructedAmount:
-              description: >-
-                The `InstructedAmount` from the request. For an `IBAN` instrument, the amount the LFI debits when the
-                payment is made with the payment token.
+              description: The `InstructedAmount` from the request.
               allOf:
                 - $ref: '#/components/schemas/AEAmount'
             MerchantId:
-              description: >-
-                The `MerchantId` from the request, unchanged. For a `PrimaryAccountNumber` instrument, the LFI checks
-                that the card acceptor identification code (DE42) in the authorisation matches the value it stored.
+              description: The `MerchantId` from the request, unchanged.
               allOf:
                 - $ref: '#/components/schemas/AEMerchantId'
             TerminalId:
-              description: >-
-                The `TerminalId` from the request, unchanged. For a `PrimaryAccountNumber` instrument, the LFI checks
-                that the card acceptor terminal identification (DE41) in the authorisation matches the value it stored.
+              description: The `TerminalId` from the request, unchanged.
               allOf:
                 - $ref: '#/components/schemas/AETerminalId'
             AcquirerId:
-              description: >-
-                The `AcquirerId` from the request, unchanged. For a `PrimaryAccountNumber` instrument, the LFI checks
-                that the acquiring institution identification code (DE32) in the authorisation matches the value it
-                stored.
+              description: The `AcquirerId` from the request, unchanged.
               allOf:
                 - $ref: '#/components/schemas/AEAcquirerId'
             MerchantName:
@@ -430,16 +429,16 @@ components:
       title: Instrument details
       description: >-
         A payment instrument the customer registered for ICP Pay, selected by `SchemeName`. The TPP routes the
-        payment on `SchemeName`: `IBAN` for an account-to-account payment, `PrimaryAccountNumber` for a card
+        payment on `SchemeName`: `IBAN` for an account-to-account payment, `PAN` for a card
         payment through the card scheme (e.g. Jaywan).
       oneOf:
         - $ref: '#/components/schemas/AEInstrumentDetailsIban'
-        - $ref: '#/components/schemas/AEInstrumentDetailsPrimaryAccountNumber'
+        - $ref: '#/components/schemas/AEInstrumentDetailsPan'
       discriminator:
         propertyName: SchemeName
         mapping:
           IBAN: '#/components/schemas/AEInstrumentDetailsIban'
-          PrimaryAccountNumber: '#/components/schemas/AEInstrumentDetailsPrimaryAccountNumber'
+          PAN: '#/components/schemas/AEInstrumentDetailsPan'
     AEInstrumentDetailsIban:
       title: IBAN
       description: >-
@@ -463,8 +462,8 @@ components:
           maxLength: 70
           example: AE070331234567890123456
       additionalProperties: false
-    AEInstrumentDetailsPrimaryAccountNumber:
-      title: PrimaryAccountNumber
+    AEInstrumentDetailsPan:
+      title: PAN
       description: >-
         A card, for a card payment. The TPP submits the authorisation to the card scheme (e.g. Jaywan) as acquirer,
         with the card details and the payment token. The LFI, as issuer, checks that the card, amount, `MerchantId`,
@@ -479,13 +478,13 @@ components:
           description: Name of the identification scheme for the instrument.
           type: string
           enum:
-            - PrimaryAccountNumber
+            - PAN
         Identification:
           description: >-
-            The number of the card the customer registered for ICP Pay. Whether this is the card number (PAN) or a
-            card scheme token is an open item.
+            The number of the card the customer registered for ICP Pay. Whether this is the card number or a card
+            scheme token is an open item.
           type: string
-          pattern: ^\d{12,19}$
+          pattern: ^\d{16}$
           example: '4895370012003478'
         ExpiryDate:
           description: The expiry date of the card, as `MM/YY`. Format to be confirmed.
@@ -498,22 +497,9 @@ components:
       description: >-
         An opaque, single-use reference the LFI issues in the response, and the only thing the TPP passes back to the
         LFI at the point of payment: when initiating the payment for an `IBAN` instrument, or in the card
-        authorisation through the card scheme for a `PrimaryAccountNumber` instrument.
-
-
-        It carries no data. When it issues the payment token, the LFI stores against it what it issued it for: the
-        calling TPP (`azp`), the expiry (`exp`), the `UaeKycId`, the ICP token, the `InstructedAmount`, the
-        `MerchantId`, `TerminalId`, `AcquirerId` and `MerchantName`, and the `Instruments`. It returns the same to the
-        TPP in the response. When the payment token comes back, the LFI looks them up and makes the payment from them.
-
-
-        The LFI MUST generate it from at least 128 bits of a cryptographically secure random source, base64url-encoded
-        without padding, and MUST NOT derive it from anything else. It is valid until the `exp` of the signed response
-        message, proposed as 120 seconds after issue. It is kept short so that it fits the card authorisation message;
-        its format is to be confirmed against the card scheme's specification.
+        authorisation through the card scheme for a `PAN` instrument.
       type: string
-      pattern: ^[A-Za-z0-9_-]{22}$
-      example: O0ctDv_PYRnrTqp9ijXB6g
+      pattern: ^[A-Za-z0-9_-]{32}$
     AEError400ResponseSigned:
       description: |
         Error Signed Schema
@@ -637,6 +623,7 @@ components:
             - Event.UnexpectedEvent
             - Body.InvalidFormat
             - Resource.InvalidFormat
+            - Query.UnmatchedInstrument
         - pattern: ^[A-Za-z]+\.[A-Za-z0-9]+$
     AEError403:
       description: Error

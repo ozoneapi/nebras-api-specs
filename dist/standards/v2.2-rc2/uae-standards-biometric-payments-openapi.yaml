@@ -499,7 +499,7 @@ components:
         LFI at the point of payment: when initiating the payment for an `IBAN` instrument, or in the card
         authorisation through the card scheme for a `PAN` instrument.
       type: string
-      pattern: ^[A-Za-z0-9_-]{32}$
+      pattern: ^[A-Za-z0-9_-]{36}$
     AEError400ResponseSigned:
       description: |
         Error Signed Schema

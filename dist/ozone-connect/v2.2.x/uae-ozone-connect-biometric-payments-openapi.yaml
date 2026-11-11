@@ -30,23 +30,12 @@ info:
     standard version 2.0.
 
 
-    ### v2.2.1
+    ### v2.2.1-alpha1
 
+    * Initial revision to provide support for BioPay POC only. Labelled alpha1 to indicate this is **NOT** for a 
+      platform standards release.
 
-    * Initial version, compatible with v2.2 of standards.
-
-    * Added `post /customers/action/instrument-query`, which returns the instrument a customer has designated as their
-      default instrument for ICP Pay payments. The request is a signed message encrypted by the TPP as a JWE to the
-      financial institution, sent as `application/jwt`, carrying the `UaeKycId` and ICP token, the amount, and the
-      merchant, terminal and acquirer the payment is made at. It is not carried out under a consent. The response
-      returns a payment token and the values from the request in `Data`, with `Data.Instruments` listing the
-      instruments, each either an `IBAN` or a `PAN`, signed with `azp` identifying the TPP. The
-      response must be returned as `application/jwt`, as a signed message with the entire body encrypted as a JWE.
-      Sending either the request or the response as a signed message without encryption is prohibited. A `400`
-      response with the new error code `Query.UnmatchedInstrument` is returned if an instrument cannot be
-      matched based on the values in the request.
-
-  version: v2.2.1
+  version: v2.2.1-alpha1
 servers:
   - url: https://<your-ozone-connect-server>
 tags:
